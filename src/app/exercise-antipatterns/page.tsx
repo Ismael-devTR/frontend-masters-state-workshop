@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { id } from 'date-fns/locale';
 
 // Example 1: Filtered Destinations
 // Problem: Storing filtered destinations in state when they can be derived from the destinations list and filter criteria
@@ -23,16 +24,8 @@ function FilteredDestinations() {
     { id: 3, name: 'New York', country: 'USA', rating: 4.3 },
   ]);
   const [filterRating, setFilterRating] = useState(4.5);
-  const [filteredDestinations, setFilteredDestinations] = useState<
-    typeof destinations
-  >([]);
+  const filteredDestinations = destinations.filter((dest) => dest.rating >= filterRating)
 
-  // This effect is unnecessary - we can derive filtered destinations
-  useEffect(() => {
-    setFilteredDestinations(
-      destinations.filter((dest) => dest.rating >= filterRating)
-    );
-  }, [destinations, filterRating]);
 
   return (
     <Card>
@@ -83,12 +76,9 @@ function TripSummary() {
     { id: 2, name: 'Hotel', cost: 300 },
     { id: 3, name: 'Activities', cost: 200 },
   ]);
-  const [totalCost, setTotalCost] = useState(0);
+  const totalCost = tripItems.reduce((sum, item) => sum + item.cost, 0)
 
-  // This effect is unnecessary - we can derive total cost
-  useEffect(() => {
-    setTotalCost(tripItems.reduce((sum, item) => sum + item.cost, 0));
-  }, [tripItems]);
+
 
   return (
     <Card>
@@ -125,17 +115,14 @@ function TripSummary() {
 // Problem: Storing available dates in state when they can be derived from booked dates
 function AvailableDates() {
   const [bookedDates] = useState(['2024-06-01', '2024-06-02', '2024-06-03']);
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
 
   // This effect is unnecessary - we can derive available dates
-  useEffect(() => {
-    const allDates = Array.from({ length: 30 }, (_, i) => {
-      const date = new Date('2024-06-01');
-      date.setDate(date.getDate() + i);
-      return date.toISOString().split('T')[0];
-    });
-    setAvailableDates(allDates.filter((date) => !bookedDates.includes(date)));
-  }, [bookedDates]);
+  const allDates = Array.from({ length: 30 }, (_, i) => {
+    const date = new Date('2024-06-01');
+    date.setDate(date.getDate() + i);
+    return date.toISOString().split('T')[0];
+  });
+  const availableDates = allDates.filter((date) => !bookedDates.includes(date));
 
   return (
     <Card>
@@ -300,37 +287,37 @@ function SearchResults() {
 // Problem: Using useState for timer ID when useRef should be used (doesn't need re-renders)
 function BookingTimer() {
   const [timeLeft, setTimeLeft] = useState(300); // 5 minutes
-  const [timerId, setTimerId] = useState<NodeJS.Timeout | null>(null); // ❌ Should use useRef
+  const timerIdRef = useRef<NodeJS.Timeout | null>(null)
 
   const startTimer = () => {
-    if (timerId) clearInterval(timerId);
+    if (timerIdRef.current) clearInterval(timerIdRef.current);
 
     const id = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(id);
-          setTimerId(null); // ❌ Unnecessary re-render
+          timerIdRef.current = null
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    setTimerId(id); // ❌ Unnecessary re-render
+    timerIdRef.current = id
   };
 
   const stopTimer = () => {
-    if (timerId) {
-      clearInterval(timerId);
-      setTimerId(null); // ❌ Unnecessary re-render
+    if (timerIdRef.current) {
+      clearInterval(timerIdRef.current);
+      timerIdRef.current = null
     }
   };
 
   useEffect(() => {
     return () => {
-      if (timerId) clearInterval(timerId);
+      if (timerIdRef.current) clearInterval(timerIdRef.current);
     };
-  }, [timerId]); // ❌ Effect runs every time timerId changes
+  }, []);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
@@ -378,17 +365,17 @@ function HotelGallery() {
     'hotel-pool.jpg',
     'hotel-restaurant.jpg',
   ]);
-  const [lastScrollPosition, setLastScrollPosition] = useState(0); // ❌ Should use useRef
+  const lastScrollPosition = useRef<number | null>(null)
 
   useEffect(() => {
     const handleScroll = () => {
       const currentPosition = window.scrollY;
 
       // We only need this for internal logic, not for rendering
-      setLastScrollPosition(currentPosition); // ❌ Causes unnecessary re-render
+      lastScrollPosition.current = currentPosition
 
       // Some scroll-based logic here...
-      if (currentPosition > lastScrollPosition) {
+      if (currentPosition > lastScrollPosition.current) {
         console.log('Scrolling down');
       } else {
         console.log('Scrolling up');
@@ -397,7 +384,7 @@ function HotelGallery() {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollPosition]); // ❌ Effect re-runs on every scroll
+  }, []);
 
   return (
     <Card>
@@ -420,7 +407,7 @@ function HotelGallery() {
           ))}
         </div>
         <div className="mt-4 text-xs text-muted-foreground">
-          Debug: Last scroll position: {lastScrollPosition}px
+          Debug: Last scroll position: {lastScrollPosition.current}px
         </div>
       </CardContent>
     </Card>
@@ -549,11 +536,10 @@ function HotelSelection() {
           {hotels.map((hotel) => (
             <div
               key={hotel.id}
-              className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                selectedHotel?.id === hotel.id
-                  ? 'border-primary bg-primary/5'
-                  : 'hover:bg-accent'
-              }`}
+              className={`p-3 border rounded-lg cursor-pointer transition-colors ${selectedHotel?.id === hotel.id
+                ? 'border-primary bg-primary/5'
+                : 'hover:bg-accent'
+                }`}
               onClick={() => handleHotelSelect(hotel)}
             >
               <div className="flex items-center justify-between">
@@ -738,8 +724,8 @@ function BookingSummary() {
     setTotalHotelCost(bookingData.hotelPrice * diffDays);
     setGrandTotal(
       bookingData.flightPrice * bookingData.passengers +
-        bookingData.hotelPrice * diffDays +
-        bookingData.taxes
+      bookingData.hotelPrice * diffDays +
+      bookingData.taxes
     );
   }, [bookingData]);
 
